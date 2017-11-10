@@ -8,7 +8,6 @@ Sub Button1_Click()
     strPath = "D:\TiM100\TSD\17420111\"
     
     Application.DisplayAlerts = False
-     
     'Delete all worksheets except the first
     Do While ThisWorkbook.Worksheets.Count > 1
         ThisWorkbook.Worksheets(2).Delete
@@ -17,15 +16,14 @@ Sub Button1_Click()
     Do While ThisWorkbook.Charts.Count > 0
         ThisWorkbook.Charts(1).Delete
     Loop
+    Application.DisplayAlerts = True
     
      'this returns an empty string "" if the file cannot be found and will error if the folder is incorrect
     strFile = Dir(strPath & "*.txt")
-    MsgBox (strFile)
     Do While strFile <> ""
          'add a new worksheet at the end of the macro workbook to paste into
         ThisWorkbook.Worksheets.Add After:=Sheets(Sheets.Count)
         Set currentSheet = ThisWorkbook.Worksheets(Sheets.Count)
-        'MsgBox Len(strFile)
         currentSheet.Name = Right(strFile, Len(strFile) - 25)
          
          'open the csv file and assign it to a variable so that we can easily reference it later
