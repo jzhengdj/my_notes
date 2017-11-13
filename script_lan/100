@@ -1,0 +1,12 @@
+$C ************************************************************
+$C * available Macro-Commands:                                *
+$C *                                                          *
+$C * $C  Comment Line                                         *
+$C * $L  Loop to Start                                        *
+$C * $R  Replay, wait to Echo from device                     *
+$C * $P  Pause, press play to continue                        *
+$C * $W  Wait in ms                                           *
+$C * $A  Send ASCII content                                   *
+$C * $X  Send HEX content                                     *
+$C * empty line are not send                                  *
+$C ************************************************************
