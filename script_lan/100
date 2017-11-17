@@ -10,3 +10,27 @@ $C * $A  Send ASCII content                                   *
 $C * $X  Send HEX content                                     *
 $C * empty line are not send                                  *
 $C ************************************************************
+$C *** Read DeviceIdent
+$X 73 52 4E 20 44 65 76 69 63 65 49 64 65 6E 74 20 
+$W 100
+
+$C *** MCReferenceTarget
+$X 73 52 4E 20 4D 43 52 54 20 
+$W 100
+
+$C *** login prod mode
+$X 73 4D 49 00 00 06 E8 0C 74 4D
+$W 100
+
+$C *** comModePermanent_read
+$X 73 4D 49 00 00 06 E8 0C 74 4D
+$W 100
+
+
+$C *** login first
+$X 73 4D 49 00 00 06 E8 0C 74 4D
+$W 100
+
+$C *** comModePermanent_set0
+$X 73 57 4E 20 50 50 43 50 20 00
+$W 100
