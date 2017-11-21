@@ -2,3 +2,5 @@
 [Threading documentation from Microsoft](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/threading/)  
 
 
+very important --- how to convert between hex and numerical
+[hex to num](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/types/how-to-convert-between-hexadecimal-strings-and-numeric-types)
