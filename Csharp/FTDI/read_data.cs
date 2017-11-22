@@ -25,8 +25,8 @@ namespace testUI
 
         private void alt_open_btn_Click(object sender, EventArgs e)
         {
-            sendMsg(sRN_DeviceIdent_BA);
-            getMsg();
+            
+            getMsg(sRN_DeviceIdent_BA, ref DeviceIdent);
             //byte[] readData = new byte[sRN_DeviceIdent_RES_LENGTH];
             //receiveMsg(ref readData, sRN_DeviceIdent_RES_LENGTH);
             //listBox2.Items.Add(sRN_DeviceIdent_RES_LENGTH);
@@ -39,23 +39,26 @@ namespace testUI
 
 
         // command data field
-        static readonly int[] DeviceIdent_DataLength = new int[] { 0, 0, 1 };
+        //static readonly int[] DeviceIdent_DataLength = new int[] { 0, 0, 1 };
 
 
         byte[] sRN_DeviceIdent_BA = getReadCMD_BA("DeviceIdent");
 
-        const uint sRN_DeviceIdent_RES_LENGTH = 44;
+        // const uint sRN_DeviceIdent_RES_LENGTH = 44;
         //const string sRN_DeviceIdent = "020202020000001073524E204465766963654964656E742005";
 
 
 
-        struct ColaBFormat
+        public struct ColaBFormat
         {
             public int fieldLength;
             public string fieldName;
+            public string valueString;
+            public int valueInt;
+
         };
 
-        static ColaBFormat[] DeviceIdent = new ColaBFormat[]
+        public ColaBFormat[] DeviceIdent = new ColaBFormat[]
         {
             new ColaBFormat() { fieldLength = 0, fieldName = "Name" },
             new ColaBFormat() { fieldLength = 0, fieldName = "Version" }
@@ -77,8 +80,10 @@ namespace testUI
 
 
 
-        public void getMsg()
+        public void getMsg(byte[] dataToSend, ref ColaBFormat[] dataFormat)
         {
+            sendMsg(dataToSend);
+
             // receive the first 8 byte first (header)
             uint header_length = 8;
             byte[] header = new byte[header_length];
@@ -89,11 +94,39 @@ namespace testUI
             byte[] message = new byte[messageLength];
             receiveMsg(ref message, messageLength);
 
+            
+
+            // If the system architecture is little-endian (that is, little end first),
+            // reverse the byte array.
+            //if (BitConverter.IsLittleEndian)
+            //    Array.Reverse(message);
+
+            // get populate the data
+            int pos = (int)(dataToSend.Length - header_length - 1);
+            for (int i = 0; i < dataFormat.Length; i++)
+            {
+                int len = dataFormat[i].fieldLength;
+                if (len == 0)
+                {
+                    len = BitConverter.ToInt32(message, pos+1);
+                    listBox2.Items.Add(pos);
+                    listBox2.Items.Add(message[pos]);
+                    listBox2.Items.Add(message[pos+1]);
+                    listBox2.Items.Add(len);
+                    pos += 2;
+                    dataFormat[i].valueInt = 0;
+                    // todo: convert the data to string format and store in the valueString.
+                }
+                    
+
+
+            }
+
             // purge the rest of the message
             ftStatus = ftdi_handle.Purge(FTDI.FT_PURGE.FT_PURGE_RX);
             if (ftStatus != FTDI.FT_STATUS.FT_OK)
             {
-                listBox1.Items.Add("Failed to purge rx buffer (error " + ftStatus.ToString() + ")");
+                listBox1.Items.Add("Failed to Purge RX buffer (error " + ftStatus.ToString() + ")");
                 return;
             }
 
