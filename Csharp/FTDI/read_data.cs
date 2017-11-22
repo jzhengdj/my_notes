@@ -7,10 +7,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Runtime.Remoting.Metadata.W3cXsd2001;
 using FTD2XX_NET;
 
-
+//using System.Runtime.Remoting.Metadata.W3cXsd2001;
 
 
 
@@ -26,43 +25,95 @@ namespace testUI
 
         private void alt_open_btn_Click(object sender, EventArgs e)
         {
-            sendCommand(sRN_DeviceIdent_ba);
+            sendMsg(sRN_DeviceIdent_BA);
+            getMsg();
+            //byte[] readData = new byte[sRN_DeviceIdent_RES_LENGTH];
+            //receiveMsg(ref readData, sRN_DeviceIdent_RES_LENGTH);
+            //listBox2.Items.Add(sRN_DeviceIdent_RES_LENGTH);
         }
 
 
         //***************  command list  ******************
-        const string sRN_DeviceIdent = "020202020000001073524E204465766963654964656E742005";
-        byte[] sRN_DeviceIdent_ba = GetStringToBytes(sRN_DeviceIdent);
-        const int RES_sRN_DeviceIdent_LENGTH = 20;
+        // standard message header
+        static readonly byte[] STX_BA = new byte [] { 2, 2, 2, 2, 0, 0, 0 };
+
+
+        // command data field
+        static readonly int[] DeviceIdent_DataLength = new int[] { 0, 0, 1 };
+
+
+        byte[] sRN_DeviceIdent_BA = getReadCMD_BA("DeviceIdent");
+
+        const uint sRN_DeviceIdent_RES_LENGTH = 44;
+        //const string sRN_DeviceIdent = "020202020000001073524E204465766963654964656E742005";
+
+
+
+        struct ColaBFormat
+        {
+            public int fieldLength;
+            public string fieldName;
+        };
+
+        static ColaBFormat[] DeviceIdent = new ColaBFormat[]
+        {
+            new ColaBFormat() { fieldLength = 0, fieldName = "Name" },
+            new ColaBFormat() { fieldLength = 0, fieldName = "Version" }
+        };
+
+
+
+
         //*************************************************
 
 
 
 
-        FTDI.FT_STATUS ftStatus = FTDI.FT_STATUS.FT_OK;
-
         // Create new instance of the FTDI device class
         FTDI ftdi_handle = new FTDI();
+
+        FTDI.FT_STATUS ftStatus = FTDI.FT_STATUS.FT_OK;
         UInt32 ftdiDeviceCount;
 
 
 
+        public void getMsg()
+        {
+            // receive the first 8 byte first (header)
+            uint header_length = 8;
+            byte[] header = new byte[header_length];
+            receiveMsg(ref header, header_length);
 
-        
-        public void sendCommand(byte[] dataToWrite)
+            // receive the meat of the message
+            uint messageLength = (uint)header[header_length - 1];
+            byte[] message = new byte[messageLength];
+            receiveMsg(ref message, messageLength);
+
+            // purge the rest of the message
+            ftStatus = ftdi_handle.Purge(FTDI.FT_PURGE.FT_PURGE_RX);
+            if (ftStatus != FTDI.FT_STATUS.FT_OK)
+            {
+                listBox1.Items.Add("Failed to purge rx buffer (error " + ftStatus.ToString() + ")");
+                return;
+            }
+
+            return;
+        }
+
+
+        public void sendMsg(byte[] dataToWrite)
         {
             // Set read timeout to 5 seconds, write timeout to infinite
             ftStatus = ftdi_handle.SetTimeouts(5000, 0);
             if (ftStatus != FTDI.FT_STATUS.FT_OK)
             {
-                // Wait for a key press
                 listBox1.Items.Add("Failed to set timeouts (error " + ftStatus.ToString() + ")");
                 return;
             }
-            
+
             // Write string data to the device
-            
-            //byte[] dataToWrite = sRN_DeviceIdent_ba;
+
+            //byte[] dataToWrite = sRN_DeviceIdent_BA;
             UInt32 numBytesWritten = 0;
             // Note that the Write method is overloaded, so can write string or byte array data
             ftStatus = ftdi_handle.Write(dataToWrite, dataToWrite.Length, ref numBytesWritten);
@@ -73,9 +124,79 @@ namespace testUI
                 return;
             }
             
+            return;
+        }
 
+        public void receiveMsg(ref byte[] readData, uint res_length) //
+        { 
+            UInt32 numBytesAvailable = 0;
+            UInt32 numberOfTries = 0;
+            do
+            {
+                ftStatus = ftdi_handle.GetRxBytesAvailable(ref numBytesAvailable);
+                if (ftStatus != FTDI.FT_STATUS.FT_OK)
+                {
+                    // Wait for a key press
+                    listBox1.Items.Add("Failed to get number of bytes available to read (error " + ftStatus.ToString() + ")");
+                    return;
+                }
+                System.Threading.Thread.Sleep(5);
+                numberOfTries++;
+            } while (numBytesAvailable < res_length && numberOfTries < 100);
+
+            if (numberOfTries > 99)
+            {
+                listBox1.Items.Add("No response received from the Device. Please check connection.");
+                return;
+            }
             
+            UInt32 numBytesRead = 0;
+            // Note that the Read method is overloaded, so can read string or byte array data
+            ftStatus = ftdi_handle.Read(readData, res_length, ref numBytesRead);
+            if (ftStatus != FTDI.FT_STATUS.FT_OK)
+            {
+                // Wait for a key press
+                listBox1.Items.Add("Failed to read data (error " + ftStatus.ToString() + ")");
+                return;
+            }
+            
+            listBox2.Items.Add(BitConverter.ToString(readData));
+
+            return;
+
             /*
+            
+            //listBox2.Items.Add(GetBytesToString(readData));
+            //listBox2.Items.Add(BitConverter.ToString(getReadCMD_BA("DeviceIdent")));
+
+            // prepare the byte for the data
+            string value = "";
+            foreach (byte byt in readData)
+                value += String.Format("{0} ", byt);
+            listBox2.Items.Add(value);
+
+
+
+            // convert the byte array to ASCII code, HOW???
+            string[] hexValuesSplit = BitConverter.ToString(readData).Split('-');
+            string response = "test";
+            foreach (String hex in hexValuesSplit)
+            {
+                // Convert the number expressed in base-16 to an integer.
+                int value = Convert.ToInt32(hex, 16);
+                // Get the character corresponding to the integral value.
+
+                listBox2.Items.Add(((char)value).ToString());
+                response += ((char)value).ToString();
+                listBox2.Items.Add(response);
+                //Char.ConvertFromUtf32(value);
+                //listBox2.Items.Add(Char.ConvertFromUtf32(value).ToString());
+            }
+            //listBox2.Items.Add(response);
+
+
+
+
             // Check the amount of data available to read
             // In this case we know how much data we are expecting, 
             // so wait until we have all of the bytes we have sent.
@@ -89,7 +210,7 @@ namespace testUI
                     listBox1.Items.Add("Failed to get number of bytes available to read (error " + ftStatus.ToString() + ")");
                     return;
                 }
-            } while (numBytesAvailable < RES_sRN_DeviceIdent_LENGTH);
+            } while (numBytesAvailable < sRN_DeviceIdent_RES_LENGTH);
 
             // Now that we have the amount of data we want available, read it
             string readData;
@@ -108,9 +229,8 @@ namespace testUI
             ftStatus = ftdi_handle.Close();
             */
 
-            return;
-        }
 
+        }
 
         private void GetVirtuCommPort()
         {
@@ -197,12 +317,46 @@ namespace testUI
             return;
         }
 
-        public static byte[] GetStringToBytes(string value)
+        public static byte[] getReadCMD_BA(string cmd)
+        {
+            // ensure cmd start with "sRN"
+            if (cmd[1] != 's') cmd = "sRN "+ cmd;
+            // ensure cmd end with space
+            if (cmd[cmd.Length - 1] != ' ') cmd += ' ';
+            
+            byte[] msg_ba = new byte[STX_BA.Length + cmd.Length + 2];
+            byte[] cmd_ba = Encoding.ASCII.GetBytes(cmd);
+
+            STX_BA.CopyTo(msg_ba, 0);
+            msg_ba[STX_BA.Length] = (byte)cmd.Length;
+            cmd_ba.CopyTo(msg_ba, STX_BA.Length + 1);
+            msg_ba[STX_BA.Length + cmd_ba.Length + 1] = getCRC(cmd_ba);
+
+            return msg_ba;
+        }
+
+        public static byte getCRC(byte[] value)
+        {
+            byte crc = 0;
+            foreach (byte byt in value)
+                crc ^= byt;
+            return crc;
+        }
+
+        /*
+        public static byte[] getStringToBytes(string value)
         {
             SoapHexBinary shb = SoapHexBinary.Parse(value);
             return shb.Value;
         }
 
+        
+        public static string GetBytesToString(byte[] value)
+        {
+            SoapHexBinary shb = new SoapHexBinary(value);
+            return shb.ToString();
+        }
+        */
 
     }
 }
