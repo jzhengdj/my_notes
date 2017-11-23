@@ -26,42 +26,50 @@ namespace testUI
         private void alt_open_btn_Click(object sender, EventArgs e)
         {
             
-            getMsg(sRN_DeviceIdent_BA, ref DeviceIdent);
+            getData(sRN_DeviceIdent_BA, ref DeviceIdent);
             //byte[] readData = new byte[sRN_DeviceIdent_RES_LENGTH];
             //receiveMsg(ref readData, sRN_DeviceIdent_RES_LENGTH);
-            //listBox2.Items.Add(sRN_DeviceIdent_RES_LENGTH);
+            //listBox2.Items.Add(BitConverter.ToString(sRN_CidVersion_BA));
+            //getData(sRN_CidVersion_BA, ref CidVersion);
         }
 
 
         //***************  command list  ******************
         // standard message header
         static readonly byte[] STX_BA = new byte [] { 2, 2, 2, 2, 0, 0, 0 };
-
+        //static readonly byte[] LOGIN_PROD_CMD = new byte[] {115, 77, 73, 0, 0, 6, 232, 13, 116, 77};
 
         // command data field
         //static readonly int[] DeviceIdent_DataLength = new int[] { 0, 0, 1 };
 
 
-        byte[] sRN_DeviceIdent_BA = getReadCMD_BA("DeviceIdent");
+        byte[] sRN_DeviceIdent_BA = get_sRNToBA("DeviceIdent");
+        byte[] sRN_CidVersion_BA = get_sRNToBA("CidVersion");
 
-        // const uint sRN_DeviceIdent_RES_LENGTH = 44;
-        //const string sRN_DeviceIdent = "020202020000001073524E204465766963654964656E742005";
+        
 
-
-
-        public struct ColaBFormat
+        public struct dataField
         {
             public int fieldLength;
             public string fieldName;
             public string valueString;
             public int valueInt;
-
         };
 
-        public ColaBFormat[] DeviceIdent = new ColaBFormat[]
+
+        public dataField[] DeviceIdent = new dataField[]
         {
-            new ColaBFormat() { fieldLength = 0, fieldName = "Name" },
-            new ColaBFormat() { fieldLength = 0, fieldName = "Version" }
+            new dataField() { fieldLength = 0, fieldName = "Name" },
+            new dataField() { fieldLength = 0, fieldName = "Version" }
+        };
+
+        public dataField[] CidVersion = new dataField[]
+        {
+            new dataField() { fieldLength = 2, fieldName = "Major Version" },
+            new dataField() { fieldLength = 2, fieldName = "Minor Version" },
+            new dataField() { fieldLength = 2, fieldName = "Patch Version" },
+            new dataField() { fieldLength = 4, fieldName = "Build Number" },
+            new dataField() { fieldLength = 1, fieldName = "Version Classifier" }
         };
 
 
@@ -80,7 +88,7 @@ namespace testUI
 
 
 
-        public void getMsg(byte[] dataToSend, ref ColaBFormat[] dataFormat)
+        public void getData(byte[] dataToSend, ref dataField[] dataFormat)
         {
             sendMsg(dataToSend);
 
@@ -89,38 +97,10 @@ namespace testUI
             byte[] header = new byte[header_length];
             receiveMsg(ref header, header_length);
 
-            // receive the meat of the message
-            uint messageLength = (uint)header[header_length - 1];
+            // receive the meat of the message, call it message
+            uint messageLength = (uint)header[header_length - 1] + 1; // +1 to include CRC byte
             byte[] message = new byte[messageLength];
             receiveMsg(ref message, messageLength);
-
-            
-
-            // If the system architecture is little-endian (that is, little end first),
-            // reverse the byte array.
-            //if (BitConverter.IsLittleEndian)
-            //    Array.Reverse(message);
-
-            // get populate the data
-            int pos = (int)(dataToSend.Length - header_length - 1);
-            for (int i = 0; i < dataFormat.Length; i++)
-            {
-                int len = dataFormat[i].fieldLength;
-                if (len == 0)
-                {
-                    len = BitConverter.ToInt32(message, pos+1);
-                    listBox2.Items.Add(pos);
-                    listBox2.Items.Add(message[pos]);
-                    listBox2.Items.Add(message[pos+1]);
-                    listBox2.Items.Add(len);
-                    pos += 2;
-                    dataFormat[i].valueInt = 0;
-                    // todo: convert the data to string format and store in the valueString.
-                }
-                    
-
-
-            }
 
             // purge the rest of the message
             ftStatus = ftdi_handle.Purge(FTDI.FT_PURGE.FT_PURGE_RX);
@@ -130,6 +110,57 @@ namespace testUI
                 return;
             }
 
+            // verify the receive message is valid.
+            if (getCRC(message) != 0)
+            {
+                listBox1.Items.Add("Failed CRC check");
+                return;
+            }
+
+            // get populate the data
+            int pos = (int)(dataToSend.Length - header_length - 1);
+            
+            string dataToShow = "";
+
+            
+            for (int i = 0; i < dataFormat.Length; i++)
+            {
+                int len = dataFormat[i].fieldLength;
+                if (len == 0)
+                {
+                    // get the content of the flex string and store in the valueString, valueInt don't care.
+                    len = (int)message[pos]*256+(int)message[pos+1];
+
+                    if (len == 0) 
+                        continue; // no content in the flex string field
+
+                    byte[] sub_message = new byte[len];
+                    Array.Copy(message, pos+2, sub_message, 0, len);
+                    dataFormat[i].valueString = Encoding.ASCII.GetString(sub_message);
+
+                    // adjust pos
+                    pos += len + 2;
+                    // store the flex string.
+                    dataToShow += String.Format("{0}: {1}\t", dataFormat[i].fieldName, dataFormat[i].valueString);
+                    
+                } else {
+                    // get the number value. populate valueInt only, valueString don't care.
+                    int temp_int = 0;
+                    for (int j = 0; j < len; j++)
+                        temp_int = temp_int * 256 + (int)message[pos+j];
+                    dataFormat[i].valueInt = temp_int;
+
+                    //adjust pos
+                    pos += len;
+
+                    // store the number value.
+                    dataToShow += String.Format("{0}: {1}\t", dataFormat[i].fieldName, dataFormat[i].valueInt);
+                }
+            }
+            
+
+            // print out for debug.
+            listBox2.Items.Add(dataToShow);
             return;
         }
 
@@ -156,7 +187,8 @@ namespace testUI
                 listBox1.Items.Add("Failed to write to device (error " + ftStatus.ToString() + ")");
                 return;
             }
-            
+
+            //listBox2.Items.Add(BitConverter.ToString(dataToWrite));
             return;
         }
 
@@ -193,14 +225,14 @@ namespace testUI
                 return;
             }
             
-            listBox2.Items.Add(BitConverter.ToString(readData));
+            //listBox2.Items.Add(BitConverter.ToString(readData));
 
             return;
 
             /*
             
             //listBox2.Items.Add(GetBytesToString(readData));
-            //listBox2.Items.Add(BitConverter.ToString(getReadCMD_BA("DeviceIdent")));
+            //listBox2.Items.Add(BitConverter.ToString(get_sRNToBA("DeviceIdent")));
 
             // prepare the byte for the data
             string value = "";
@@ -350,22 +382,39 @@ namespace testUI
             return;
         }
 
-        public static byte[] getReadCMD_BA(string cmd)
+        public static byte[] get_sRNToBA(string cmd)
         {
             // ensure cmd start with "sRN"
             if (cmd[1] != 's') cmd = "sRN "+ cmd;
             // ensure cmd end with space
             if (cmd[cmd.Length - 1] != ' ') cmd += ' ';
             
-            byte[] msg_ba = new byte[STX_BA.Length + cmd.Length + 2];
             byte[] cmd_ba = Encoding.ASCII.GetBytes(cmd);
 
+            byte[] msg_ba = new byte[STX_BA.Length + cmd_ba.Length + 2];
+
             STX_BA.CopyTo(msg_ba, 0);
-            msg_ba[STX_BA.Length] = (byte)cmd.Length;
+            msg_ba[STX_BA.Length] = (byte)cmd_ba.Length;
             cmd_ba.CopyTo(msg_ba, STX_BA.Length + 1);
             msg_ba[STX_BA.Length + cmd_ba.Length + 1] = getCRC(cmd_ba);
 
             return msg_ba;
+
+
+            //return getCMD_BA(cmd_ba);
+        }
+
+        public static byte[] getCMD_BA(byte[] cmd_ba)
+        {
+            byte[] msg_ba = new byte[STX_BA.Length + cmd_ba.Length + 2];
+
+            STX_BA.CopyTo(msg_ba, 0);
+            msg_ba[STX_BA.Length] = (byte)msg_ba.Length;
+            cmd_ba.CopyTo(msg_ba, STX_BA.Length + 1);
+            msg_ba[STX_BA.Length + cmd_ba.Length + 1] = getCRC(cmd_ba);
+
+            return msg_ba;
+
         }
 
         public static byte getCRC(byte[] value)
