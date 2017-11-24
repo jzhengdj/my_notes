@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using FTD2XX_NET;
-
+using System.Threading;
 //using System.Runtime.Remoting.Metadata.W3cXsd2001;
 
 
@@ -17,36 +17,40 @@ namespace testUI
 {
     public partial class Form1 : Form
     {
+        delegate void StringArgReturningVoidDelegate(string text);
+
         public Form1()
         {
             InitializeComponent();
             GetVirtuCommPort();
+            sendMsg(LOGIN_PROD_CMD_BA);
+
+            //measureTask = new Task(keepMeasure);
+            //measureThread = new Thread(keepMeasure);
+            //measureThread.IsBackground = true;
         }
 
-        private void alt_open_btn_Click(object sender, EventArgs e)
-        {
-            
-            getData(sRN_DeviceIdent_BA, ref DeviceIdent);
-            //byte[] readData = new byte[sRN_DeviceIdent_RES_LENGTH];
-            //receiveMsg(ref readData, sRN_DeviceIdent_RES_LENGTH);
-            //listBox2.Items.Add(BitConverter.ToString(sRN_CidVersion_BA));
-            //getData(sRN_CidVersion_BA, ref CidVersion);
-        }
+        #region constants
 
 
         //***************  command list  ******************
         // standard message header
         static readonly byte[] STX_BA = new byte [] { 2, 2, 2, 2, 0, 0, 0 };
-        //static readonly byte[] LOGIN_PROD_CMD = new byte[] {115, 77, 73, 0, 0, 6, 232, 13, 116, 77};
+        static readonly byte[] LOGIN_PROD_CMD = new byte[] {115, 77, 73, 0, 0, 6, 232, 12, 116, 77};
 
         // command data field
         //static readonly int[] DeviceIdent_DataLength = new int[] { 0, 0, 1 };
 
 
-        byte[] sRN_DeviceIdent_BA = get_sRNToBA("DeviceIdent");
-        byte[] sRN_CidVersion_BA = get_sRNToBA("CidVersion");
-
+        byte[] sRN_DeviceIdent_BA = get_sRN_BA("DeviceIdent");
+        byte[] sRN_CidVersion_BA = get_sRN_BA("CidVersion");
+        byte[] sRN_MCAD_BA = get_sRN_BA("MCAD");
+        byte[] sRN_MCST_BA = get_sRN_BA("MCST");
+        byte[] sRN_MCHS_BA = get_sRN_BA("MCHS"); //StatisticOutDone
         
+
+        byte[] LOGIN_PROD_CMD_BA = get_Whole_CMD_BA(LOGIN_PROD_CMD);
+
 
         public struct dataField
         {
@@ -72,11 +76,38 @@ namespace testUI
             new dataField() { fieldLength = 1, fieldName = "Version Classifier" }
         };
 
+        public dataField[] MCAD = new dataField[]
+        {
+            new dataField() { fieldLength = 2, fieldName = "Angle" },
+            new dataField() { fieldLength = 2, fieldName = "AveragingDepth" }
+        };
+
+        public dataField[] MCST = new dataField[]
+        {
+            new dataField() { fieldLength = 2, fieldName = "Angle" },
+            new dataField() { fieldLength = 2, fieldName = "AveragingDepth" },
+            new dataField() { fieldLength = 4, fieldName = "DistMin" },
+            new dataField() { fieldLength = 4, fieldName = "DistMax" },
+            new dataField() { fieldLength = 4, fieldName = "DistSum" },
+            new dataField() { fieldLength = 4, fieldName = "DistSquareSum" },
+            new dataField() { fieldLength = 4, fieldName = "DistSquareSumOverflowCounter" },
+
+            new dataField() { fieldLength = 4, fieldName = "LevelMin" },
+            new dataField() { fieldLength = 4, fieldName = "LevelMax" },
+            new dataField() { fieldLength = 4, fieldName = "LevelSum" },
+            new dataField() { fieldLength = 4, fieldName = "LevelSquareSum" },
+            new dataField() { fieldLength = 4, fieldName = "LevelSquareSumOverflowCounter" }
+        };
+
+        public dataField[] MCHS = new dataField[] //StatisticOutDone
+        {
+            new dataField() { fieldLength = 1, fieldName = "Written" }
+        };
 
 
 
         //*************************************************
-
+        #endregion
 
 
 
@@ -86,9 +117,59 @@ namespace testUI
         FTDI.FT_STATUS ftStatus = FTDI.FT_STATUS.FT_OK;
         UInt32 ftdiDeviceCount;
 
+        //Thread measureThread;
+        //Task measureTask;
+        bool flag_stop_measure = false;
 
 
-        public void getData(byte[] dataToSend, ref dataField[] dataFormat)
+
+        public void measure()
+        {
+
+            // send angle and depth requirements
+            byte[] temp_bytes = get_sWN_BA("MCAD", MCAD);
+            verifySend(temp_bytes);
+
+            // set OutDone false to get new reading.
+            MCHS[0].valueInt = 0;
+            temp_bytes = get_sWN_BA("MCHS", MCHS);
+            verifySend(temp_bytes);
+
+            
+            // ensure the reading is ready.
+            //listBox2.Items.Add("test");
+            while (MCHS[0].valueInt == 0)
+            {
+                //Thread.Sleep(10);
+                getDataFieldValue(sRN_MCHS_BA, ref MCHS);
+            }
+
+            getDataFieldValue(sRN_MCST_BA, ref MCST);
+            printAllDataField(MCST); // print measurement data
+            return;
+        }
+
+        public void keepMeasure()
+        {
+            while (true)
+            {
+                //Thread.Sleep(10);
+                Task.Delay(10);
+                measure();
+                if (flag_stop_measure)
+                    break;
+            }
+            // perform cleanup if there is any.
+        }
+
+
+
+
+
+
+        #region basic functions
+
+        public void verifySend(byte[] dataToSend)
         {
             sendMsg(dataToSend);
 
@@ -102,13 +183,7 @@ namespace testUI
             byte[] message = new byte[messageLength];
             receiveMsg(ref message, messageLength);
 
-            // purge the rest of the message
-            ftStatus = ftdi_handle.Purge(FTDI.FT_PURGE.FT_PURGE_RX);
-            if (ftStatus != FTDI.FT_STATUS.FT_OK)
-            {
-                listBox1.Items.Add("Failed to Purge RX buffer (error " + ftStatus.ToString() + ")");
-                return;
-            }
+
 
             // verify the receive message is valid.
             if (getCRC(message) != 0)
@@ -117,12 +192,57 @@ namespace testUI
                 return;
             }
 
+            // verify the receive message is acknowledged.
+            if (message[2] != (byte)65)
+            {
+                listBox2.Items.Add("!!! Not Acknowledged !!!");
+                return;
+            }
+
+            /*
+            // print out the data for debugging
+            listBox2.Items.Add(BitConverter.ToString(dataToSend));
+            */
+
+            return;
+
+        }
+
+        public void getDataFieldValue(byte[] dataToSend, ref dataField[] dataFormat)
+        {
+            sendMsg(dataToSend);
+
+            // receive the first 8 byte first (header)
+            uint header_length = 8;
+            byte[] header = new byte[header_length];
+            receiveMsg(ref header, header_length);
+
+            // receive the meat of the message, call it message
+            uint messageLength = (uint)header[header_length - 1] + 1; // +1 to include CRC byte
+            byte[] message = new byte[messageLength];
+            receiveMsg(ref message, messageLength);
+
+
+
+            // verify the receive message is valid.
+            if (getCRC(message) != 0)
+            {
+                listBox2.Items.Add("Failed CRC check");
+                return;
+            }
+
+            // verify the receive message is acknowledged.
+            if (message[2] != (byte)65)
+            {
+                listBox2.Items.Add("!!! Not Acknowledged !!!");
+                return;
+            }
+
             // get populate the data
             int pos = (int)(dataToSend.Length - header_length - 1);
             
-            string dataToShow = "";
-
             
+
             for (int i = 0; i < dataFormat.Length; i++)
             {
                 int len = dataFormat[i].fieldLength;
@@ -140,26 +260,50 @@ namespace testUI
 
                     // adjust pos
                     pos += len + 2;
-                    // store the flex string.
-                    dataToShow += String.Format("{0}: {1}\t", dataFormat[i].fieldName, dataFormat[i].valueString);
+                   
                     
                 } else {
                     // get the number value. populate valueInt only, valueString don't care.
                     int temp_int = 0;
                     for (int j = 0; j < len; j++)
-                        temp_int = temp_int * 256 + (int)message[pos+j];
+                        //temp_int = temp_int * 256 + (int)message[pos+j]; // true if all data are uint.
+                        temp_int += (int)message[pos + j] << 8 * (len - j - 1); // ignore uint for now, take everything as int.
+
                     dataFormat[i].valueInt = temp_int;
 
                     //adjust pos
                     pos += len;
 
-                    // store the number value.
-                    dataToShow += String.Format("{0}: {1}\t", dataFormat[i].fieldName, dataFormat[i].valueInt);
+                    
                 }
             }
+
+
             
+        }
+
+        public void printAllDataField(dataField[] dataFormat)
+        {
+            string dataToShow = "";
+
+            for (int i = 0; i < dataFormat.Length; i++)
+            {
+                if (dataFormat[i].fieldLength == 0)
+                {
+                    // store the flex string.
+                    dataToShow += String.Format("{0}: {1}    ", dataFormat[i].fieldName, dataFormat[i].valueString);
+                }
+                else
+                {
+                    // store the number value.
+                    dataToShow += String.Format("{0}: {1}  ", dataFormat[i].fieldName, dataFormat[i].valueInt);
+                }
+            }
 
             // print out for debug.
+            //listBox2.SelectedIndex = listBox2.Items.Count - 1;
+            //listBox2.SelectedIndex = -1;
+            //AddListbox2Text(dataToShow);
             listBox2.Items.Add(dataToShow);
             return;
         }
@@ -167,11 +311,12 @@ namespace testUI
 
         public void sendMsg(byte[] dataToWrite)
         {
-            // Set read timeout to 5 seconds, write timeout to infinite
-            ftStatus = ftdi_handle.SetTimeouts(5000, 0);
+
+            // purge the rest of the message
+            ftStatus = ftdi_handle.Purge(FTDI.FT_PURGE.FT_PURGE_RX);
             if (ftStatus != FTDI.FT_STATUS.FT_OK)
             {
-                listBox1.Items.Add("Failed to set timeouts (error " + ftStatus.ToString() + ")");
+                listBox1.Items.Add("Failed to Purge RX buffer (error " + ftStatus.ToString() + ")");
                 return;
             }
 
@@ -232,7 +377,7 @@ namespace testUI
             /*
             
             //listBox2.Items.Add(GetBytesToString(readData));
-            //listBox2.Items.Add(BitConverter.ToString(get_sRNToBA("DeviceIdent")));
+            //listBox2.Items.Add(BitConverter.ToString(get_sRN_BA("DeviceIdent")));
 
             // prepare the byte for the data
             string value = "";
@@ -317,7 +462,7 @@ namespace testUI
 
             if (ftdiDeviceCount == 0)
             {
-                alt_open_btn.Text = "Search for FTDI";
+                button1.Text = "Search for FTDI";
                 listBox1.Items.Add("No FTDI device found!");
                 return;
             }
@@ -377,39 +522,80 @@ namespace testUI
                 listBox1.Items.Add("Failed to set flow control (error " + ftStatus.ToString() + ")");
                 return;
             }
-            
+
+            // Set read timeout to 5 seconds, write timeout to infinite
+            ftStatus = ftdi_handle.SetTimeouts(5000, 0);
+            if (ftStatus != FTDI.FT_STATUS.FT_OK)
+            {
+                listBox1.Items.Add("Failed to set timeouts (error " + ftStatus.ToString() + ")");
+                return;
+            }
 
             return;
         }
 
-        public static byte[] get_sRNToBA(string cmd)
+        public static byte[] get_sRN_BA(string cmd)
         {
             // ensure cmd start with "sRN"
-            if (cmd[1] != 's') cmd = "sRN "+ cmd;
+            if (cmd[0] != 's') cmd = "sRN "+ cmd;
             // ensure cmd end with space
             if (cmd[cmd.Length - 1] != ' ') cmd += ' ';
             
             byte[] cmd_ba = Encoding.ASCII.GetBytes(cmd);
-
-            byte[] msg_ba = new byte[STX_BA.Length + cmd_ba.Length + 2];
-
-            STX_BA.CopyTo(msg_ba, 0);
-            msg_ba[STX_BA.Length] = (byte)cmd_ba.Length;
-            cmd_ba.CopyTo(msg_ba, STX_BA.Length + 1);
-            msg_ba[STX_BA.Length + cmd_ba.Length + 1] = getCRC(cmd_ba);
-
-            return msg_ba;
-
-
-            //return getCMD_BA(cmd_ba);
+            return get_Whole_CMD_BA(cmd_ba);
         }
 
-        public static byte[] getCMD_BA(byte[] cmd_ba)
+        public static byte[] get_sWN_BA(string cmd, dataField[] parameters)
+        {
+            // ensure cmd start with "sWN"
+            if (cmd[0] != 's') cmd = "sWN " + cmd;
+            // ensure cmd end with space
+            if (cmd[cmd.Length - 1] != ' ') cmd += ' ';
+
+            int len = cmd.Length;
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                if (parameters[i].fieldLength != 0)
+                    len += parameters[i].fieldLength;
+                else
+                    len += parameters[i].valueString.Length + 2;
+            }
+
+            byte[] cmd_ba = new byte[len];
+            Encoding.ASCII.GetBytes(cmd).CopyTo(cmd_ba, 0);
+            int pos = cmd.Length;
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                len = parameters[i].fieldLength;
+                if (len != 0)
+                {
+                    byte[] temp_bytes = new byte[len];
+                    for (int j = 0; j < len; j++)
+                        temp_bytes[j] = (byte)(parameters[i].valueInt >> 8 * (len - j - 1));
+                    temp_bytes.CopyTo(cmd_ba, pos);
+                    pos += len;
+                }
+                else
+                {
+                    len = parameters[i].valueString.Length;
+                    cmd_ba[pos] = (byte)(len >> 8);
+                    cmd_ba[pos + 1] = (byte)len;
+                    Encoding.ASCII.GetBytes(parameters[i].valueString).CopyTo(cmd_ba, pos + 2);
+                    pos += len + 2;
+                }
+            }
+            
+
+            return get_Whole_CMD_BA(cmd_ba);
+        }
+
+        public static byte[] get_Whole_CMD_BA(byte[] cmd_ba)
         {
             byte[] msg_ba = new byte[STX_BA.Length + cmd_ba.Length + 2];
 
             STX_BA.CopyTo(msg_ba, 0);
-            msg_ba[STX_BA.Length] = (byte)msg_ba.Length;
+            msg_ba[STX_BA.Length] = (byte)cmd_ba.Length;
             cmd_ba.CopyTo(msg_ba, STX_BA.Length + 1);
             msg_ba[STX_BA.Length + cmd_ba.Length + 1] = getCRC(cmd_ba);
 
@@ -424,6 +610,99 @@ namespace testUI
                 crc ^= byt;
             return crc;
         }
+
+        
+
+
+        private void AddListbox2Text(string text)
+        {
+            // InvokeRequired required compares the thread ID of the  
+            // calling thread to the thread ID of the creating thread.  
+            // If these threads are different, it returns true.  
+            if (this.listBox2.InvokeRequired)
+            {
+                StringArgReturningVoidDelegate d = new StringArgReturningVoidDelegate(AddListbox2Text);
+                this.Invoke(d, new object[] { text });
+            }
+            else
+            {
+                this.listBox2.Items.Add(text);
+            }
+        }
+        #endregion
+
+
+
+
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            getDataFieldValue(sRN_DeviceIdent_BA, ref DeviceIdent);
+            printAllDataField(DeviceIdent);
+            //byte[] readData = new byte[sRN_DeviceIdent_RES_LENGTH];
+            //receiveMsg(ref readData, sRN_DeviceIdent_RES_LENGTH);
+            //listBox2.Items.Add(BitConverter.ToString(sRN_CidVersion_BA));
+            getDataFieldValue(sRN_CidVersion_BA, ref CidVersion);
+            printAllDataField(CidVersion);
+
+            //getDataFieldValue(sRN_MCST_BA, ref MCST);
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            //getDataFieldValue(sRN_MCAD_BA, ref MCAD);
+            
+            getDataFieldValue(sRN_MCST_BA, ref MCST); // measurement result
+            printAllDataField(MCST);
+
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            // change angle, sample depth
+            MCAD[0].valueInt = 200;
+            MCAD[1].valueInt = 5;
+            measure();
+            /*
+            byte[] temp_bytes = get_sWN_BA("MCAD", MCAD);
+            
+
+            verifySend(temp_bytes);
+            getDataFieldValue(sRN_MCAD_BA, ref MCAD);
+
+            // set OutDone 
+            MCHS[0].valueInt = 0;
+            temp_bytes = get_sWN_BA("MCHS", MCHS);
+
+            verifySend(temp_bytes);
+            */
+
+            //getDataFieldValue(sRN_MCST_BA, ref MCST);
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            //listBox2.Items.Add(BitConverter.ToString(LOGIN_PROD_CMD_BA));
+            //sendMsg(LOGIN_PROD_CMD_BA);
+            //getDataFieldValue(sRN_MCHS_BA, ref MCHS);
+            //if (measureThread.ThreadState == System.Threading.ThreadState.Unstarted)
+            //    measureThread.Start();
+            //else
+            //    measureThread.Run();
+            //measureThread.Start();
+            //measureTask.RunSynchronously();
+        }
+
+        private void button5_Click(object sender, EventArgs e)
+        {
+            //listBox2.Items.Add(measureThread.ThreadState);
+        }
+
+        /*
+        private void Form1_Closing(object sender, CancelEventArgs e)
+        {
+            flag_stop_measure = true;
+        }*/
 
         /*
         public static byte[] getStringToBytes(string value)
