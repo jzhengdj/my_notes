@@ -25,3 +25,7 @@ very important --- how to convert between hex and numerical
     Public Const CMD_MCDISTRSSISTATISTIC As String = "73524E204D435354"
     Public Const RES_MCDISTRSSISTATISTIC_LENGTH As Integer = 62
 
+
+
+https://stackoverflow.com/questions/4130194/what-is-the-difference-between-task-and-thread
+to study difference between task and thread.
