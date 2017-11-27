@@ -29,3 +29,18 @@ very important --- how to convert between hex and numerical
 
 https://stackoverflow.com/questions/4130194/what-is-the-difference-between-task-and-thread  
 to study difference between task and thread.
+
+[task repeat](https://stackoverflow.com/questions/7472013/how-to-create-a-thread-task-with-a-continuous-loop)
+
+how to solve the int conversion problem.
+
+ int temp_int = 0;
+                    for (int j = 0; j < len; j++)
+                        //temp_int = temp_int * 256 + (int)message[pos+j]; // true if all data are uint.
+                        temp_int += (int)(message[pos + j] << 8 * (len - j - 1)); // ignore uint for now, take everything as int.
+
+                    dataFormat[i].valueInt = temp_int;
+
+                    //adjust pos
+                    pos += len;
+
