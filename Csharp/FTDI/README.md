@@ -34,6 +34,7 @@ to study difference between task and thread.
 
 how to solve the int conversion problem.
 
+'''
  int temp_int = 0;
                     for (int j = 0; j < len; j++)
                         //temp_int = temp_int * 256 + (int)message[pos+j]; // true if all data are uint.
@@ -43,4 +44,4 @@ how to solve the int conversion problem.
 
                     //adjust pos
                     pos += len;
-
+'''
