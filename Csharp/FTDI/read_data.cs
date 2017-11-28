@@ -28,6 +28,7 @@ namespace testUI
             //measureTask = new Task(keepMeasure);
             //measureThread = new Thread(keepMeasure);
             //measureThread.IsBackground = true;
+            
         }
 
         #region constants
@@ -54,8 +55,9 @@ namespace testUI
 
         public struct dataField
         {
-            public int fieldLength;
+            public short fieldLength;
             public string fieldName;
+            public string fieldType;
             public string valueString;
             public int valueInt;
         };
@@ -63,45 +65,45 @@ namespace testUI
 
         public dataField[] DeviceIdent = new dataField[]
         {
-            new dataField() { fieldLength = 0, fieldName = "Name" },
-            new dataField() { fieldLength = 0, fieldName = "Version" }
+            new dataField() { fieldLength = 0, fieldName = "Name" , fieldType = "FlexString"},
+            new dataField() { fieldLength = 0, fieldName = "Version", fieldType = "FlexString"}
         };
 
         public dataField[] CidVersion = new dataField[]
         {
-            new dataField() { fieldLength = 2, fieldName = "Major Version" },
-            new dataField() { fieldLength = 2, fieldName = "Minor Version" },
-            new dataField() { fieldLength = 2, fieldName = "Patch Version" },
-            new dataField() { fieldLength = 4, fieldName = "Build Number" },
-            new dataField() { fieldLength = 1, fieldName = "Version Classifier" }
+            new dataField() { fieldLength = 2, fieldName = "Major Version", fieldType = "UInt"},
+            new dataField() { fieldLength = 2, fieldName = "Minor Version", fieldType = "UInt"},
+            new dataField() { fieldLength = 2, fieldName = "Patch Version", fieldType = "UInt"},
+            new dataField() { fieldLength = 4, fieldName = "Build Number", fieldType = "UDInt"},
+            new dataField() { fieldLength = 1, fieldName = "Version Classifier", fieldType = "Enum8"}
         };
 
         public dataField[] MCAD = new dataField[]
         {
-            new dataField() { fieldLength = 2, fieldName = "Angle" },
-            new dataField() { fieldLength = 2, fieldName = "AveragingDepth" }
+            new dataField() { fieldLength = 2, fieldName = "Angle", fieldType = "Int"},
+            new dataField() { fieldLength = 2, fieldName = "AveragingDepth", fieldType = "UInt"}
         };
 
         public dataField[] MCST = new dataField[]
         {
-            new dataField() { fieldLength = 2, fieldName = "Angle" },
-            new dataField() { fieldLength = 2, fieldName = "AveragingDepth" },
-            new dataField() { fieldLength = 4, fieldName = "DistMin" },
-            new dataField() { fieldLength = 4, fieldName = "DistMax" },
-            new dataField() { fieldLength = 4, fieldName = "DistSum" },
-            new dataField() { fieldLength = 4, fieldName = "DistSquareSum" },
-            new dataField() { fieldLength = 4, fieldName = "DistSquareSumOverflowCounter" },
+            new dataField() { fieldLength = 2, fieldName = "Angle", fieldType = "Int"},
+            new dataField() { fieldLength = 2, fieldName = "AveragingDepth", fieldType = "UInt"},
+            new dataField() { fieldLength = 4, fieldName = "DistMin", fieldType = "UDInt"},
+            new dataField() { fieldLength = 4, fieldName = "DistMax", fieldType = "UDInt" },
+            new dataField() { fieldLength = 4, fieldName = "DistSum", fieldType = "UDInt" },
+            new dataField() { fieldLength = 4, fieldName = "DistSquareSum", fieldType = "UDInt" },
+            new dataField() { fieldLength = 4, fieldName = "DistSquareSumOverflowCounter", fieldType = "UDInt" },
 
-            new dataField() { fieldLength = 4, fieldName = "LevelMin" },
-            new dataField() { fieldLength = 4, fieldName = "LevelMax" },
-            new dataField() { fieldLength = 4, fieldName = "LevelSum" },
-            new dataField() { fieldLength = 4, fieldName = "LevelSquareSum" },
-            new dataField() { fieldLength = 4, fieldName = "LevelSquareSumOverflowCounter" }
+            new dataField() { fieldLength = 4, fieldName = "LevelMin", fieldType = "UDInt" },
+            new dataField() { fieldLength = 4, fieldName = "LevelMax", fieldType = "UDInt" },
+            new dataField() { fieldLength = 4, fieldName = "LevelSum", fieldType = "UDInt" },
+            new dataField() { fieldLength = 4, fieldName = "LevelSquareSum", fieldType = "UDInt" },
+            new dataField() { fieldLength = 4, fieldName = "LevelSquareSumOverflowCounter", fieldType = "UDInt" }
         };
 
         public dataField[] MCHS = new dataField[] //StatisticOutDone
         {
-            new dataField() { fieldLength = 1, fieldName = "Written" }
+            new dataField() { fieldLength = 1, fieldName = "Written", fieldType = "Bool"}
         };
 
 
@@ -109,7 +111,10 @@ namespace testUI
         //*************************************************
         #endregion
 
+        int sweepAngle_Start = -400, sweepAngle_End = 200;
+        int sampleDepth = 5;
 
+        bool flag_stop_measure = true;
 
         // Create new instance of the FTDI device class
         FTDI ftdi_handle = new FTDI();
@@ -117,11 +122,7 @@ namespace testUI
         FTDI.FT_STATUS ftStatus = FTDI.FT_STATUS.FT_OK;
         UInt32 ftdiDeviceCount;
 
-        //Thread measureThread;
-        //Task measureTask;
-        bool flag_stop_measure = false;
-
-
+        
 
         public void measure()
         {
@@ -136,12 +137,12 @@ namespace testUI
             verifySend(temp_bytes);
 
             
-            // ensure the reading is ready.
-            //listBox2.Items.Add("test");
+            // ensure the reading is ready. (keep pulling the flag until it's 1)
             while (MCHS[0].valueInt == 0)
             {
-                //Thread.Sleep(10);
+                Thread.Sleep(100);
                 getDataFieldValue(sRN_MCHS_BA, ref MCHS);
+
             }
 
             getDataFieldValue(sRN_MCST_BA, ref MCST);
@@ -151,20 +152,48 @@ namespace testUI
 
         public void keepMeasure()
         {
+
+            MCAD[0].valueInt = sweepAngle_Start; // initialise the measuring angle
+
             while (true)
             {
-                //Thread.Sleep(10);
-                Task.Delay(10);
-                measure();
+                
                 if (flag_stop_measure)
                     break;
+                
+                if (MCAD[0].valueInt > sweepAngle_End)
+                    MCAD[0].valueInt = sweepAngle_Start;
+                if (MCAD[1].valueInt != sampleDepth)
+                    MCAD[1].valueInt = sampleDepth;
+                measure();
+                MCAD[0].valueInt += 100; // increase measuring angle
             }
             // perform cleanup if there is any.
         }
 
+        public void processData()
+        {
+
+            double average;
+
+            int N = MCST[1].valueInt;
+            int DistSum = MCST[4].valueInt;
+            int DistSquareSum = MCST[5].valueInt;
+
+            //calculate average
+            average = (double)DistSum / N; // distSum/AveragingDepth.
+            CrossThreadListbox2Add(average.ToString());
 
 
+            double standardDeviation;
+            //standardDeviation = Math.Sqrt((DistSquareSum - DistSum * DistSum * (2 - 1.0 / N) / N) / (N - 1));
+            standardDeviation = Math.Sqrt(DistSquareSum - (long)DistSum * DistSum);
+            CrossThreadListbox2Add(standardDeviation.ToString());
+            //standardDeviation = MCST[]
 
+            return;
+        }
+        
 
 
         #region basic functions
@@ -231,6 +260,8 @@ namespace testUI
                 return;
             }
 
+            
+
             // verify the receive message is acknowledged.
             if (message[2] != (byte)65)
             {
@@ -265,15 +296,19 @@ namespace testUI
                 } else {
                     // get the number value. populate valueInt only, valueString don't care.
                     int temp_int = 0;
+                    
                     for (int j = 0; j < len; j++)
+
                         //temp_int = temp_int * 256 + (int)message[pos+j]; // true if all data are uint.
-                        temp_int += (int)message[pos + j] << 8 * (len - j - 1); // ignore uint for now, take everything as int.
+                        if (len == 2)
+                            temp_int += (short)(message[pos + j] << 8 * (len - j - 1));
+                        else
+                            temp_int += (int)(message[pos + j] << 8 * (len - j - 1)); // ignore uint for now, take everything as int.
 
                     dataFormat[i].valueInt = temp_int;
 
                     //adjust pos
                     pos += len;
-
                     
                 }
             }
@@ -303,8 +338,8 @@ namespace testUI
             // print out for debug.
             //listBox2.SelectedIndex = listBox2.Items.Count - 1;
             //listBox2.SelectedIndex = -1;
-            //AddListbox2Text(dataToShow);
-            listBox2.Items.Add(dataToShow);
+            CrossThreadListbox2Add(dataToShow);
+            //listBox2.Items.Add(dataToShow);
             return;
         }
 
@@ -614,14 +649,14 @@ namespace testUI
         
 
 
-        private void AddListbox2Text(string text)
+        private void CrossThreadListbox2Add(string text)
         {
             // InvokeRequired required compares the thread ID of the  
             // calling thread to the thread ID of the creating thread.  
             // If these threads are different, it returns true.  
             if (this.listBox2.InvokeRequired)
             {
-                StringArgReturningVoidDelegate d = new StringArgReturningVoidDelegate(AddListbox2Text);
+                StringArgReturningVoidDelegate d = new StringArgReturningVoidDelegate(CrossThreadListbox2Add);
                 this.Invoke(d, new object[] { text });
             }
             else
@@ -630,10 +665,7 @@ namespace testUI
             }
         }
         #endregion
-
-
-
-
+        
 
         private void button1_Click(object sender, EventArgs e)
         {
@@ -654,6 +686,7 @@ namespace testUI
             
             getDataFieldValue(sRN_MCST_BA, ref MCST); // measurement result
             printAllDataField(MCST);
+            processData();
 
         }
 
@@ -691,33 +724,27 @@ namespace testUI
             //    measureThread.Run();
             //measureThread.Start();
             //measureTask.RunSynchronously();
+
+            //Task taskA = new Task(() => measure());
+            if (flag_stop_measure)
+            {
+                flag_stop_measure = false;
+                Task taskA = Task.Factory.StartNew(() => keepMeasure());
+            }
+            else
+                flag_stop_measure = true;
+            //taskA.Start();
+            //taskA.Wait();
         }
 
         private void button5_Click(object sender, EventArgs e)
         {
+            flag_stop_measure = true;
             //listBox2.Items.Add(measureThread.ThreadState);
         }
-
-        /*
-        private void Form1_Closing(object sender, CancelEventArgs e)
-        {
-            flag_stop_measure = true;
-        }*/
-
-        /*
-        public static byte[] getStringToBytes(string value)
-        {
-            SoapHexBinary shb = SoapHexBinary.Parse(value);
-            return shb.Value;
-        }
-
         
-        public static string GetBytesToString(byte[] value)
-        {
-            SoapHexBinary shb = new SoapHexBinary(value);
-            return shb.ToString();
-        }
-        */
 
     }
+    
+
 }
