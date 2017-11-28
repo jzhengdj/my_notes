@@ -1,3 +1,10 @@
+
+Questions:  
+1. MCHS, data ready flag keeps at 0. (how to repeat the fault? power cycle solve the problem.)  
+
+
+
+
 [threading read write](https://stackoverflow.com/questions/2439122/problem-with-two-net-threads-and-hardware-access)  
 [Threading documentation from Microsoft](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/threading/)  
 
@@ -35,14 +42,4 @@ to study difference between task and thread.
 how to solve the int conversion problem.
 Answer: use bitwise operation. Pay attention to the byte size differences.
 
-```
- int temp_int = 0;
-                    for (int j = 0; j < len; j++)
-                        //temp_int = temp_int * 256 + (int)message[pos+j]; // true if all data are uint.
-                        temp_int += (int)(message[pos + j] << 8 * (len - j - 1)); // ignore uint for now, take everything as int.
 
-                    dataFormat[i].valueInt = temp_int;
-
-                    //adjust pos
-                    pos += len;
-```
