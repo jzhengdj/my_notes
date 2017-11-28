@@ -33,8 +33,9 @@ to study difference between task and thread.
 [task repeat](https://stackoverflow.com/questions/7472013/how-to-create-a-thread-task-with-a-continuous-loop)
 
 how to solve the int conversion problem.
+Answer: use bitwise operation. Pay attention to the byte size differences.
 
-'''
+```
  int temp_int = 0;
                     for (int j = 0; j < len; j++)
                         //temp_int = temp_int * 256 + (int)message[pos+j]; // true if all data are uint.
@@ -44,4 +45,4 @@ how to solve the int conversion problem.
 
                     //adjust pos
                     pos += len;
-'''
+```
