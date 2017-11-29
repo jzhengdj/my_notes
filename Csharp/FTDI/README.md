@@ -42,4 +42,4 @@ to study difference between task and thread.
 how to solve the int conversion problem.
 Answer: use bitwise operation. Pay attention to the byte size differences.
 
-
+[text change](https://msdn.microsoft.com/en-us/library/system.windows.forms.control.textchanged(v=vs.110).aspx)
