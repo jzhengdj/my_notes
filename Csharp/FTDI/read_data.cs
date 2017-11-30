@@ -18,10 +18,12 @@ namespace testUI
     public partial class Form1 : Form
     {
         delegate void StringArgReturningVoidDelegate(string text);
+        delegate void GridViewArgReturningVoidDelegate(string[] result_array);
 
         public Form1()
         {
             InitializeComponent();
+            customiseForm();
             GetVirtuCommPort();
             sendMsg(LOGIN_PROD_CMD_BA);
 
@@ -30,6 +32,8 @@ namespace testUI
             //measureThread.IsBackground = true;
             
         }
+
+        
 
         #region constants
 
@@ -59,7 +63,7 @@ namespace testUI
             public string fieldName;
             public string fieldType;
             public string valueString;
-            public int valueInt;
+            public long valueInt;
         };
 
 
@@ -111,7 +115,7 @@ namespace testUI
         //*************************************************
         #endregion
 
-        int sweepAngle_Start = -400, sweepAngle_End = 200;
+        int sweepAngle_Start = -500, sweepAngle_End = 500;
         int sampleDepth = 5;
 
         bool flag_stop_measure = true;
@@ -146,13 +150,29 @@ namespace testUI
             }
 
             getDataFieldValue(sRN_MCST_BA, ref MCST);
-            printAllDataField(MCST); // print measurement data
+            //printAllDataField(MCST); // print measurement data
+            
+            processData();
             return;
         }
+
+        public void sweepOnce()
+        {
+            CT_Clear_dataGridView1();
+
+            MCAD[1].valueInt = sampleDepth;
+            for (int angle = sweepAngle_Start; angle <= sweepAngle_End; angle+=100)
+            {
+                MCAD[0].valueInt = angle;
+                measure();
+            }
+        }
+
 
         public void keepMeasure()
         {
 
+            CT_Clear_dataGridView1();
             MCAD[0].valueInt = sweepAngle_Start; // initialise the measuring angle
 
             while (true)
@@ -162,7 +182,10 @@ namespace testUI
                     break;
                 
                 if (MCAD[0].valueInt > sweepAngle_End)
+                {
                     MCAD[0].valueInt = sweepAngle_Start;
+                    //CT_Clear_dataGridView1();
+                }
                 if (MCAD[1].valueInt != sampleDepth)
                     MCAD[1].valueInt = sampleDepth;
                 measure();
@@ -173,24 +196,34 @@ namespace testUI
 
         public void processData()
         {
+            long N = MCST[1].valueInt;
 
-            double average;
+            long DistSum = MCST[4].valueInt;
+            long DistSquareSum = MCST[5].valueInt;
 
-            int N = MCST[1].valueInt;
-            int DistSum = MCST[4].valueInt;
-            int DistSquareSum = MCST[5].valueInt;
+            long RssiSum = MCST[9].valueInt;
+            long RssiSquareSum = MCST[10].valueInt;
 
-            //calculate average
-            average = (double)DistSum / N; // distSum/AveragingDepth.
-            CrossThreadListbox2Add(average.ToString());
+            //calculate average 
+            
+            double avg_dist = (double)DistSum / N;
+            double avg_rssi = (double)RssiSum / N;
 
+            //calculate standard Deviation
+            
+            double s_dist = Math.Sqrt((DistSquareSum - DistSum * DistSum / N) / (N - 1));
+            double s_rssi = Math.Sqrt((RssiSquareSum - RssiSum * RssiSum / N) / (N - 1));
 
-            double standardDeviation;
-            //standardDeviation = Math.Sqrt((DistSquareSum - DistSum * DistSum * (2 - 1.0 / N) / N) / (N - 1));
-            standardDeviation = Math.Sqrt(DistSquareSum - (long)DistSum * DistSum);
-            CrossThreadListbox2Add(standardDeviation.ToString());
-            //standardDeviation = MCST[]
+            string[] data_array = { String.Format("{0:0.00}", MCST[0].valueInt/100),
+                String.Format("{0:0.00}", avg_dist),
+                String.Format("{0:0.00}", s_dist),
+                String.Format("{0:0.00}", avg_rssi),
+                String.Format("{0:0.00}", s_rssi)
+            };
 
+            CT_Write_dataGridView1(data_array);
+            //CT_Write_listBox2(String.Format("Angle: {0}, Avg_dist: {1:0.0}, Deviation_dist: {2:0.00}, Avg_rssi: {3:0.0}, Deviation_rssi: {4:0.00}",
+            //MCST[0].valueInt/100, avg_dist, s_dist, avg_rssi, s_rssi));
             return;
         }
         
@@ -295,15 +328,15 @@ namespace testUI
                     
                 } else {
                     // get the number value. populate valueInt only, valueString don't care.
-                    int temp_int = 0;
+                    long temp_int = 0;
                     
                     for (int j = 0; j < len; j++)
 
                         //temp_int = temp_int * 256 + (int)message[pos+j]; // true if all data are uint.
-                        if (len == 2)
+                        if (dataFormat[i].fieldType == "Int")
                             temp_int += (short)(message[pos + j] << 8 * (len - j - 1));
                         else
-                            temp_int += (int)(message[pos + j] << 8 * (len - j - 1)); // ignore uint for now, take everything as int.
+                            temp_int += (long)(message[pos + j] << 8 * (len - j - 1)); // ignore uint for now, take everything as int.
 
                     dataFormat[i].valueInt = temp_int;
 
@@ -338,7 +371,7 @@ namespace testUI
             // print out for debug.
             //listBox2.SelectedIndex = listBox2.Items.Count - 1;
             //listBox2.SelectedIndex = -1;
-            CrossThreadListbox2Add(dataToShow);
+            CT_Write_listBox2(dataToShow);
             //listBox2.Items.Add(dataToShow);
             return;
         }
@@ -649,14 +682,14 @@ namespace testUI
         
 
 
-        private void CrossThreadListbox2Add(string text)
+        private void CT_Write_listBox2(string text)
         {
             // InvokeRequired required compares the thread ID of the  
             // calling thread to the thread ID of the creating thread.  
             // If these threads are different, it returns true.  
             if (this.listBox2.InvokeRequired)
             {
-                StringArgReturningVoidDelegate d = new StringArgReturningVoidDelegate(CrossThreadListbox2Add);
+                StringArgReturningVoidDelegate d = new StringArgReturningVoidDelegate(CT_Write_listBox2);
                 this.Invoke(d, new object[] { text });
             }
             else
@@ -664,8 +697,51 @@ namespace testUI
                 this.listBox2.Items.Add(text);
             }
         }
+
+        private void CT_Write_dataGridView1(string[] result_array)
+        {
+            // InvokeRequired required compares the thread ID of the  
+            // calling thread to the thread ID of the creating thread.  
+            // If these threads are different, it returns true.  
+            if (this.dataGridView1.InvokeRequired)
+            {
+                GridViewArgReturningVoidDelegate d = new GridViewArgReturningVoidDelegate(CT_Write_dataGridView1);
+                this.Invoke(d, new object[] { result_array } );
+            }
+            else
+            {
+                dataGridView1.Rows.Add(result_array);
+            }
+        }
+
+        private void CT_Clear_dataGridView1()
+        {
+            // InvokeRequired required compares the thread ID of the  
+            // calling thread to the thread ID of the creating thread.  
+            // If these threads are different, it returns true.  
+            if (this.dataGridView1.InvokeRequired)
+            {
+                Action d = new Action(CT_Clear_dataGridView1);
+                this.Invoke(d);
+            }
+            else
+            {
+                do
+                {
+                    foreach (DataGridViewRow row in dataGridView1.Rows)
+                    {
+                        try
+                        {
+                            dataGridView1.Rows.Remove(row);
+                        }
+                        catch (Exception) { }
+                    }
+                } while (dataGridView1.Rows.Count > 1);
+            }
+        }
+
         #endregion
-        
+
 
         private void button1_Click(object sender, EventArgs e)
         {
@@ -682,20 +758,17 @@ namespace testUI
 
         private void button2_Click(object sender, EventArgs e)
         {
-            //getDataFieldValue(sRN_MCAD_BA, ref MCAD);
-            
-            getDataFieldValue(sRN_MCST_BA, ref MCST); // measurement result
-            printAllDataField(MCST);
-            processData();
-
+            MCAD[0].valueInt = sweepAngle_Start;
+            MCAD[1].valueInt = sampleDepth;
+            Task taskA = Task.Factory.StartNew(() => measure());
         }
 
         private void button3_Click(object sender, EventArgs e)
         {
             // change angle, sample depth
-            MCAD[0].valueInt = 200;
-            MCAD[1].valueInt = 5;
-            measure();
+            
+            Task taskA = Task.Factory.StartNew(() => sweepOnce());
+            
             /*
             byte[] temp_bytes = get_sWN_BA("MCAD", MCAD);
             
@@ -715,17 +788,7 @@ namespace testUI
 
         private void button4_Click(object sender, EventArgs e)
         {
-            //listBox2.Items.Add(BitConverter.ToString(LOGIN_PROD_CMD_BA));
-            //sendMsg(LOGIN_PROD_CMD_BA);
-            //getDataFieldValue(sRN_MCHS_BA, ref MCHS);
-            //if (measureThread.ThreadState == System.Threading.ThreadState.Unstarted)
-            //    measureThread.Start();
-            //else
-            //    measureThread.Run();
-            //measureThread.Start();
-            //measureTask.RunSynchronously();
-
-            //Task taskA = new Task(() => measure());
+            
             if (flag_stop_measure)
             {
                 flag_stop_measure = false;
@@ -733,17 +796,52 @@ namespace testUI
             }
             else
                 flag_stop_measure = true;
-            //taskA.Start();
-            //taskA.Wait();
+
+        }
+
+        private void button6_Click(object sender, EventArgs e)
+        {
+
+            do
+            {
+                foreach (DataGridViewRow row in dataGridView1.Rows)
+                {
+                    try
+                    {
+                        dataGridView1.Rows.Remove(row);
+                    }
+                    catch (Exception) { }
+                }
+            } while (dataGridView1.Rows.Count > 1);
+
         }
 
         private void button5_Click(object sender, EventArgs e)
         {
-            flag_stop_measure = true;
-            //listBox2.Items.Add(measureThread.ThreadState);
+
+            CT_Clear_dataGridView1();
+
         }
+
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+            sweepAngle_Start = int.Parse(textBox1.Text) * 100;
+        }
+
+        private void textBox2_TextChanged(object sender, EventArgs e)
+        {
+            sweepAngle_End = int.Parse(textBox2.Text) * 100;
+        }
+
+        private void textBox3_TextChanged(object sender, EventArgs e)
+        {
+            sampleDepth = int.Parse(textBox3.Text);
+        }
+
         
 
+        
+        
     }
     
 
