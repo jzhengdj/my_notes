@@ -1,4 +1,6 @@
 # my_ntoes
 
-Since company don't allow any storage base websites. Need to use github for note taking then.  
-[MarkDown](https://guides.github.com/features/mastering-markdown/)
+Need to use github for note taking then.  
+In short term, it is time consuming.
+
+[MarkDown Howto](https://guides.github.com/features/mastering-markdown/)
