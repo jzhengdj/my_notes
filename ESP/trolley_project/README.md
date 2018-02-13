@@ -1,0 +1,7 @@
+1. BLUETOOTH part. GATT server configuration.
+
+2. Motor control?
+  2.1 External sensor pin, interrupt mode.
+  2.2 free running timer, to record timestamp. and record ISRcount, to induce the distance from this number. (command to check timer current reading?)
+  2.3 safety feature, if long time no interrupt from the sensor pin, then need to turn off the motor. (watchdog timer?)
+  
